@@ -6,10 +6,16 @@ const geminiModelName = "gemini-3-flash-preview";
 // ============================================================================
 // 开发者配置区域
 // ============================================================================
-// [修改说明]
-// 使用 import.meta.env.VITE_DEEPSEEK_API_KEY 读取环境变量。
-// 这样 Key 不会出现在代码仓库中，而是由部署平台（Zeabur/Vercel）注入。
-const DEVELOPER_DEEPSEEK_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || ""; 
+// 尝试从多种来源读取 Key，确保万无一失
+const getEnvVar = (key: string) => {
+  // @ts-ignore
+  const meta = import.meta.env ? import.meta.env[key] : undefined;
+  // @ts-ignore
+  const proc = typeof process !== 'undefined' && process.env ? process.env[key] : undefined;
+  return meta || proc || "";
+};
+
+const DEVELOPER_DEEPSEEK_KEY = getEnvVar('VITE_DEEPSEEK_API_KEY'); 
 
 // Gemini Proxy
 const DEVELOPER_GEMINI_PROXY = ""; 
@@ -50,9 +56,8 @@ const callDeepSeek = async (apiKey: string, prompt: string, jsonMode: boolean = 
 
 // --- Gemini Helper ---
 const getGeminiAI = (baseUrl?: string) => {
-  const options: any = { 
-    apiKey: process.env.API_KEY
-  };
+  const apiKey = getEnvVar('API_KEY');
+  const options: any = { apiKey };
   if (baseUrl) {
     options.baseUrl = baseUrl;
   }
@@ -62,16 +67,15 @@ const getGeminiAI = (baseUrl?: string) => {
 // --- Helper to get effective config ---
 const getEffectiveConfig = (user: UserProfile) => {
     // 强制逻辑：如果有 DeepSeek Key (无论来自环境变量还是用户设置)，优先使用 DeepSeek
-    // 因为这对于国内用户最稳定
-    const hasDeepSeek = !!(user.deepSeekApiKey || DEVELOPER_DEEPSEEK_KEY);
+    const envDeepSeek = getEnvVar('VITE_DEEPSEEK_API_KEY');
+    const hasDeepSeek = !!(user.deepSeekApiKey || envDeepSeek);
     
-    // 默认 provider: 如果有 DeepSeek key，就用 deepseek，否则 gemini
+    // 默认 provider
     let defaultProvider: 'gemini' | 'deepseek' = hasDeepSeek ? 'deepseek' : 'gemini';
 
-    // 如果用户显式选择了 provider，则尊重用户选择 (除非选了 deepseek 但没 key)
     const provider = user.aiProvider || defaultProvider; 
     
-    const deepSeekKey = user.deepSeekApiKey || DEVELOPER_DEEPSEEK_KEY;
+    const deepSeekKey = user.deepSeekApiKey || envDeepSeek;
     const geminiUrl = user.apiBaseUrl || DEVELOPER_GEMINI_PROXY;
     
     return { provider, deepSeekKey, geminiUrl };
@@ -113,7 +117,7 @@ export const estimateFoodNutrition = async (foodDescription: string, user: UserP
   } catch (error) {
     console.error("Gemini Food Error:", error);
     if (!deepSeekKey && provider === 'deepseek') {
-        throw new Error("API Key 未配置。请联系管理员或在设置中添加。");
+        throw new Error("DeepSeek API Key 未配置。请检查 Zeabur 环境变量 VITE_DEEPSEEK_API_KEY 是否添加并重新部署。");
     }
     throw new Error("AI Service Failed");
   }
